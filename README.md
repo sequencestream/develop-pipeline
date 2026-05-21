@@ -16,9 +16,7 @@ The hybrid execution model exists to keep the common case fast (inline phases re
 
 ## Install
 
-This skill is installed via [skilladmin](https://github.com/sequencestream/skilladmin).
-
-Then install this skill:
+Installed via [skilladmin](https://github.com/sequencestream/skilladmin).
 
 ```bash
 skilladmin install https://github.com/sequencestream/develop-pipeline
