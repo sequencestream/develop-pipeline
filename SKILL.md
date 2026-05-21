@@ -1,11 +1,11 @@
 ---
-name: metalclaw-dev-flash
-description: Fast MetalClaw development pipeline where the main agent runs analyst, designer, developer, and documenter phases inline, and dispatches improver, reviewer, and tester phases as sub-agents when the complexity assessment calls for them. Each phase is guided by its core principles only — the agent decides file content/structure based on context.
+name: develop-pipeline
+description: Fast development pipeline where the main agent runs analyst, designer, developer, and documenter phases inline, and dispatches improver, reviewer, and tester phases as sub-agents when the complexity assessment calls for them. The documenter phase is also conditional. Each phase is guided by its core principles only — the agent decides file content/structure based on context.
 argument-hint: [requirement description or session directory]
 allowed-tools: Read, Write, Edit, Glob, Grep, Bash, Agent
 ---
 
-Run the MetalClaw development pipeline with a **hybrid execution model**: the main agent handles most phases inline, and only delegates the quality-gate phases (`improver`, `reviewer`, `tester`) to sub-agents when the Complexity Assessment says they're needed.
+Run the development pipeline with a **hybrid execution model**: the main agent handles most phases inline, and only delegates the quality-gate phases (`improver`, `reviewer`, `tester`) to sub-agents when the Complexity Assessment says they're needed.
 
 ## Instructions
 
@@ -24,8 +24,8 @@ Run the MetalClaw development pipeline with a **hybrid execution model**: the ma
    - `improver` runs (as a sub-agent) only if assessed as needed; otherwise go straight to `developer`.
    - After `developer` (inline), run `reviewer` (as a sub-agent) only if assessed as needed.
    - After the reviewer decision resolves, run `tester` (as a sub-agent) only if assessed as needed. If `tester` surfaces unfixed errors (files matching `<dev-session-dir>/integrations-error-*.md` without a `-DONE` suffix), loop back to `developer` → `[reviewer?]` → `tester`, capped at 3 fix iterations.
-   - `documenter` (inline) always runs last.
-5. When the workflow is complete:
+   - `documenter` (inline) runs last only if assessed as needed.
+5. When the pipeline is complete:
    - Write `done` to `<dev-session-dir>/STATE`.
    - Output a summary of what was accomplished, including which optional phases were skipped and why.
 
@@ -129,7 +129,7 @@ Run the MetalClaw development pipeline with a **hybrid execution model**: the ma
 - Each test case needs a comment describing the scenario it verifies.
 - Failures produce structured error reports so the developer loop can act on them; no silent passes.
 
-### 7. documenter (always, inline)
+### 7. documenter (conditional, inline)
 
 **Execution Steps:**
 - Determine the PRD directory `<prd-dir>` (default `<root-doc-dir>/prd/` or whatever the repo convention is). If it does not exist, stop this phase gracefully — nothing to document against.
@@ -211,14 +211,26 @@ After `designer` finishes, **Read** `<dev-session-dir>/requirement.md` and `<dev
 - No backend, data, API, or business rule is modified
 - Requirement has no integration-testable acceptance criteria
 
+**Include `documenter` when ANY of these hold:**
+- The PRD directory exists and the change affects a documented model, dictionary, procedure/rule, or application/page
+- New or reshaped user-facing behavior, pipeline, or role responsibility
+- Product positioning, architecture, or roles are genuinely impacted
+- New domain concepts, terms, or business rules are introduced
+
+**Skip `documenter` when ALL of these hold:**
+- No PRD directory exists (e.g., `<root-doc-dir>/prd/` is absent)
+- Change is internal/technical only — refactor, build/CI tweak, dependency bump, code-only bug fix with no semantic change
+- No models, dictionaries, procedures, or applications in scope are affected
+- No impact on overview, architecture, or roles
+
 **Tie-breaker rule:** When uncertain, include the phase. The cost of an unneeded review is low; the cost of skipping a needed one can be a regression.
 
 Record the decision to `<dev-session-dir>/auto-plan.md`. Keep the file short — phase-by-phase include/skip plus a one-line rationale each, and the effective pipeline on one line. No rigid template.
 
-## Pipeline
+## pipeline
 
 ```
-analyst -> designer -> [improver†] -> developer -> [reviewer†] -> [tester†] -> documenter
+analyst -> designer -> [improver†] -> developer -> [reviewer†] -> [tester†] -> [documenter]
                                        ^                           |
                                        |     (if tests fail)       |
                                        +---------------------------+
@@ -232,4 +244,4 @@ If `<dev-session-dir>/STATE` already exists when starting:
 - Read the state to determine which phase was active last.
 - If `<dev-session-dir>/auto-plan.md` exists, honor its phase decisions; otherwise re-run the Complexity Assessment before continuing past `designer`.
 - Skip already-completed phases and continue from the next phase in the effective pipeline.
-- State progression: `analyst` → `designer` → `[improver]` → `developer` → `[reviewer]` → `[tester]` → `documenter` → `done`.
+- State progression: `analyst` → `designer` → `[improver]` → `developer` → `[reviewer]` → `[tester]` → `[documenter]` → `done`.
