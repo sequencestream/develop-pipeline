@@ -1,33 +1,22 @@
 ---
 name: develop-pipeline
-description: Fast development pipeline where the main agent runs analyst, designer, developer, and documenter phases inline, and dispatches improver, reviewer, and tester phases as sub-agents when the complexity assessment calls for them. The documenter phase is also conditional. Each phase is guided by its core principles only — the agent decides file content/structure based on context.
+description: Hybrid development pipeline. The main agent runs analyst, designer, developer, and documenter inline, and dispatches improver, reviewer, and tester as sub-agents when the complexity assessment requires. Each phase is principle-guided — the agent decides file content and structure based on context.
 argument-hint: [requirement description or session directory]
 allowed-tools: Read, Write, Edit, Glob, Grep, Bash, Agent
 ---
 
-Run the development pipeline with a **hybrid execution model**: the main agent handles most phases inline, and only delegates the quality-gate phases (`improver`, `reviewer`, `tester`) to sub-agents when the Complexity Assessment says they're needed.
+Run the development pipeline with a **hybrid execution model**: the main agent runs most phases inline and delegates the quality-gate phases (`improver`, `reviewer`, `tester`) to sub-agents only when the Complexity Assessment says they're needed.
 
 ## Instructions
 
-1. Determine the root document directory as `<root-doc-dir>`, use the directory if user specifies, default to `doc/`.
-1. Determine the root session directory as `<root-session-dir>`, use the directory if user specifies, default to `changes/`.
-2. Determine the current dev session directory as `<dev-session-dir>`:
-   - Use the directory if user specifies the session directory.
-   - Otherwise, if user provides requirements info, create `<root-session-dir>/<YYYY>/<MM>/<DD>/YYYY-MM-DD-<NNN>-<requirement-short-name>/` (where `<NNN>` is a zero-padded sequential number starting from 001 within that day) and write the raw requirements to `<dev-session-dir>/requirement-raw.md`.
-   - Otherwise, require user to specify the session directory or requirements info.
-3. Run each phase by following the principles in [Phases](#phases). Before starting each phase, write the phase name to `<dev-session-dir>/STATE`.
-   - **Inline phases** (main agent): `analyst`, `designer`, `developer`, `documenter`. Execute these directly using the main agent's tools.
-   - **Sub-agent phases** (when included): `improver`, `reviewer`, `tester`. Dispatch via the `Agent` tool — see [Sub-Agent Dispatch](#sub-agent-dispatch).
-4. The pipeline is conditional:
-   - `analyst` and `designer` always run (inline).
-   - After `designer`, perform the [Complexity Assessment](#complexity-assessment) and record the decision to `<dev-session-dir>/auto-plan.md`.
-   - `improver` runs (as a sub-agent) only if assessed as needed; otherwise go straight to `developer`.
-   - After `developer` (inline), run `reviewer` (as a sub-agent) only if assessed as needed.
-   - After the reviewer decision resolves, run `tester` (as a sub-agent) only if assessed as needed. If `tester` surfaces unfixed errors (files matching `<dev-session-dir>/integrations-error-*.md` without a `-DONE` suffix), loop back to `developer` → `[reviewer?]` → `tester`, capped at 3 fix iterations.
-   - `documenter` (inline) runs last only if assessed as needed.
-5. When the pipeline is complete:
-   - Write `done` to `<dev-session-dir>/STATE`.
-   - Output a summary of what was accomplished, including which optional phases were skipped and why.
+1. Resolve `<root-doc-dir>` (user-specified, else `doc/`) and `<root-session-dir>` (user-specified, else `changes/`).
+2. Resolve `<dev-session-dir>`:
+   - If the user specifies one, use it.
+   - Else if the user supplies a requirement, create `<root-session-dir>/<YYYY>/<MM>/<DD>/YYYY-MM-DD-<NNN>-<requirement-short-name>/` (`<NNN>` = zero-padded daily sequence starting at 001) and write the raw requirement to `<dev-session-dir>/requirement-raw.md`.
+   - Else ask the user for one of the two.
+3. Run each phase by its principles in [Phases](#phases). Before starting a phase, write its name to `<dev-session-dir>/STATE`. Inline phases (`analyst`, `designer`, `developer`, `documenter`) run in the main agent; sub-agent phases (`improver`, `reviewer`, `tester`) go through [Sub-Agent Dispatch](#sub-agent-dispatch).
+4. Run the pipeline conditionally per the [Complexity Assessment](#complexity-assessment); record the decision in `<dev-session-dir>/auto-plan.md`. `analyst` and `designer` always run. If `tester` produces unfixed `<dev-session-dir>/integrations-error-*.md` files (no `-DONE` suffix), loop back through `developer → [reviewer?] → tester`, capped at 3 iterations.
+5. On completion, write `done` to `<dev-session-dir>/STATE` and output a summary, noting which optional phases were skipped and why.
 
 ## Phases
 
@@ -36,24 +25,23 @@ Run the development pipeline with a **hybrid execution model**: the main agent h
 **Output file:** `<dev-session-dir>/requirement.md`
 
 **Execution Steps:**
-- Load relevant context. If `<root-doc-dir>/prd/` or a similar PRD directory exists, skim `overview.md`, `architecture/architecture.md`, `architecture/roles.md`, `dictionaries/dictionaries.md`, and any model/process/application docs whose names match the requirement keywords. Skip files that don't exist.
-- Ask clarifying questions for unclear points; present possible answer options; let the user choose or supply a custom answer. Append the Q&A back to `<dev-session-dir>/requirement-raw.md`.
-- Turn the raw requirement into a structured requirement: background & objectives, user stories with acceptance criteria, in-scope / out-of-scope, affected roles, models, processes, and applications.
-- Write the structured requirement to `<dev-session-dir>/requirement.md`.
+- Load relevant context. If `<root-doc-dir>/prd/` (or a similar PRD directory) exists, skim `overview.md`, `architecture/architecture.md`, `architecture/roles.md`, `dictionaries/dictionaries.md`, and any model/process/application docs whose names match the requirement keywords. Skip files that don't exist.
+- Ask clarifying questions on unclear points; present options; let the user choose or supply a custom answer. Append Q&A to `<dev-session-dir>/requirement-raw.md`.
+- Turn the raw requirement into a structured requirement (background & objectives, user stories with acceptance criteria, in/out of scope, affected roles, models, processes, applications) and write it to the output file.
 
 **Principles:**
 - Describe **what**, not **how** — no technical implementation in the requirement doc.
 - **Don't assume. Don't hide confusion. Surface tradeoffs.** State assumptions explicitly; if multiple interpretations exist, present them — don't pick silently.
 - Define **strong, verifiable success criteria**. Reject vague goals like "make it work."
 - Focus only on documents relevant to the requirement scope — do not read everything.
-- Note inconsistencies found between existing documents for later resolution.
+- Note inconsistencies between existing docs for later resolution.
 
 ### 2. designer (always, inline)
 
 **Output file:** `<dev-session-dir>/design.md`
 
 **Execution Steps:**
-- Design the technical solution for `<dev-session-dir>/requirement.md` and write it to `<dev-session-dir>/design.md`
+- Design the technical solution for `<dev-session-dir>/requirement.md` and write it to the output file.
 
 **Principles:**
 - **Simplicity first.** Ask: "Would a senior engineer say this is overcomplicated?" If yes, simplify.
@@ -65,12 +53,12 @@ Run the development pipeline with a **hybrid execution model**: the main agent h
 
 **Execution:** dispatch via `Agent` (see [Sub-Agent Dispatch](#sub-agent-dispatch)).
 
-**Output files:** `<dev-session-dir>/design-review.md` and an updated `<dev-session-dir>/design.md` (preserve the original as `<dev-session-dir>/design-raw.md`).
+**Output files:** `<dev-session-dir>/design-review.md` and an updated `<dev-session-dir>/design.md` (original preserved as `<dev-session-dir>/design-raw.md`).
 
 **Execution Steps (include in the sub-agent prompt):**
 - Read `<dev-session-dir>/requirement.md` and `<dev-session-dir>/design.md`.
-- Write improvement suggestions to `<dev-session-dir>/design-review.md`.
-- Rename the current `design.md` to `design-raw.md`, then produce a new `design.md` with the accepted improvements applied.
+- Write improvement suggestions to `design-review.md`.
+- Rename the current `design.md` to `design-raw.md`, then write a new `design.md` with accepted improvements applied.
 
 **Principles (include in the sub-agent prompt):**
 - Simpler approaches win. Reject complexity that doesn't pay for itself.
@@ -80,9 +68,9 @@ Run the development pipeline with a **hybrid execution model**: the main agent h
 ### 4. developer (always, inline)
 
 **Execution Steps:**
-- Check for unfixed error files first: `<dev-session-dir>/integrations-error-*.md` **without** a `-DONE` suffix.
-  - **Bug Fix Mode** (any unfixed file exists): read each error, analyze the root cause, fix the code, re-run the failing tests, then rename each fixed file `integrations-error-<N>.md` → `integrations-error-<N>-DONE.md`.
-  - **Normal Development Mode** (no unfixed files): implement the design `<dev-session-dir>/design.md`, write/update unit tests and verify they pass, then run lint and fix any issues.
+- First check for `<dev-session-dir>/integrations-error-*.md` files **without** a `-DONE` suffix.
+  - **Bug Fix Mode** (unfixed files exist): for each, read it, find the root cause, fix the code, re-run the failing tests, then rename `integrations-error-<N>.md` → `integrations-error-<N>-DONE.md`.
+  - **Normal Development Mode** (none exist): implement `<dev-session-dir>/design.md`, write/update unit tests and verify they pass, then run lint and fix any issues.
 
 **Principles:**
 - **Simplicity first.** Minimum code that solves the problem. Nothing speculative.
@@ -99,8 +87,8 @@ Run the development pipeline with a **hybrid execution model**: the main agent h
 
 **Execution Steps (include in the sub-agent prompt):**
 - Read `<dev-session-dir>/design.md`.
-- Identify every file the developer created or modified (use `git diff` or recent file changes).
-- Review the diff for issues or improvements; write findings to `<dev-session-dir>/code-review.md`.
+- Identify every file the developer created or modified (`git diff` or recent file changes).
+- Review the diff for issues or improvements; write findings to `code-review.md`.
 - Apply accepted improvements directly to the code.
 - Run all unit tests and confirm they still pass.
 
@@ -114,14 +102,14 @@ Run the development pipeline with a **hybrid execution model**: the main agent h
 
 **Execution:** dispatch via `Agent` (see [Sub-Agent Dispatch](#sub-agent-dispatch)).
 
-**Output file:** `<dev-session-dir>/test-report-v<N>.md` (where `<N>` is the sequential run number).
+**Output file:** `<dev-session-dir>/test-report-v<N>.md` (`<N>` = sequential run number).
 
 **Execution Steps (include in the sub-agent prompt):**
-- Read `<dev-session-dir>/design.md`; review the implemented source and existing unit tests.
-- Write or update **integration tests** based on the design's integration test plan. Cover every acceptance criterion in the requirement and the edge cases it implies. Add a short comment on each test case describing the scenario it verifies.
-- Run all integration tests; analyze the results carefully.
-- Write `<dev-session-dir>/test-report-v<N>.md` summarizing the run.
-- If any test fails: pick the next sequential `<N>` by checking existing `integrations-error-*.md` files, then write `<dev-session-dir>/integrations-error-<N>.md` with (a) which tests failed, (b) error messages / stack traces, (c) likely root cause, (d) suggested fix approach. Do **not** add the `-DONE` suffix — that's the developer's job once fixed.
+- Read `<dev-session-dir>/design.md`; review the implementation and existing unit tests.
+- Write or update **integration tests** based on the design's integration test plan. Cover every acceptance criterion and its implied edge cases. Add a short comment on each test describing the scenario it verifies.
+- Run all integration tests and analyze the results.
+- Write `test-report-v<N>.md` summarizing the run.
+- On any failure: pick the next sequential `<N>` (check existing `integrations-error-*.md`), then write `<dev-session-dir>/integrations-error-<N>.md` with (a) failing tests, (b) error messages / stack traces, (c) likely root cause, (d) suggested fix. Do **not** add the `-DONE` suffix — the developer adds it after fixing.
 
 **Principles (include in the sub-agent prompt):**
 - **Never modify source code** — only tests. Source changes belong to the developer phase.
@@ -132,11 +120,9 @@ Run the development pipeline with a **hybrid execution model**: the main agent h
 ### 7. documenter (conditional, inline)
 
 **Execution Steps:**
-- Determine the PRD directory `<prd-dir>` (default `<root-doc-dir>/prd/` or whatever the repo convention is). If it does not exist, stop this phase gracefully — nothing to document against.
-- Read `<dev-session-dir>/requirement.md` and `<dev-session-dir>/design.md`.
-- Load relevant PRD documents: `overview.md`, `architecture/architecture.md`, `architecture/roles.md`, `dictionaries/dictionaries.md`, and any model/process/application docs whose names match the requirement keywords. Skip files that don't exist.
-- Update model docs under `<prd-dir>/models/`, dictionary docs under `<prd-dir>/dictionaries/`, process/rule docs under `<prd-dir>/procedures/`, and application/page docs under `<prd-dir>/applications/` to reflect this change.
-- Update the global files (`overview.md`, `architecture/architecture.md`, `architecture/roles.md`) only if the change genuinely impacts product positioning, architecture, or roles.
+- Resolve the PRD directory `<prd-dir>` (default `<root-doc-dir>/prd/`, or the repo convention). If it doesn't exist, stop this phase gracefully — nothing to document against.
+- Load relevant PRD docs, and any model/process/application docs whose names match the requirement keywords. Skip files that don't exist.
+- Update the global files (overview/architecture/roles.md/terms) if product positioning, architecture, or roles are genuinely affected.
 - Output a concise summary of what was added or changed across the PRD.
 
 **Principles:**
@@ -147,85 +133,48 @@ Run the development pipeline with a **hybrid execution model**: the main agent h
 
 ## Sub-Agent Dispatch
 
-When a conditional phase (`improver`, `reviewer`, or `tester`) is included by the Complexity Assessment, run it as an isolated sub-agent instead of inline. This keeps the quality-gate judgment independent of the main agent's context.
+When the Complexity Assessment includes `improver`, `reviewer`, or `tester`, run it as an isolated sub-agent to keep the quality-gate judgment independent of the main agent's context.
 
 Call the `Agent` tool with:
-- `description`: `"<phase> phase"` — e.g., `"reviewer phase"`.
+- `description`: `"<phase> phase"` (e.g. `"reviewer phase"`).
 - `subagent_type`: `"general-purpose"`.
-- `prompt`: a self-contained instruction to the sub-agent that includes:
-  1. The phase's **role line** (e.g., "You are an expert code reviewer.").
-  2. The phase's **Execution Steps** listed under that phase in [Phases](#phases), verbatim.
-  3. The phase's **Principles** listed under that phase in [Phases](#phases), verbatim.
-  4. The actual `<dev-session-dir>` path (substituted, not a placeholder).
-  5. The canonical output file path(s) for that phase.
-  6. A note that **output format/structure is the sub-agent's judgment call** — no rigid template, just satisfy the principles and keep downstream phases able to consume the output.
-  7. A final instruction to return a concise summary of what it did (files written, key findings, pass/fail for tester).
+- `prompt`: a self-contained instruction including:
+  1. The phase's **role line** (e.g. "You are an expert code reviewer.").
+  2. The phase's **Execution Steps** and **Principles** from [Phases](#phases), verbatim.
+  3. The actual `<dev-session-dir>` path (substituted, not a placeholder) and the canonical output file path(s).
+  4. A note that **output format is the sub-agent's call** — no rigid template, just satisfy the principles and stay consumable by downstream phases.
+  5. A final instruction to return a concise summary (files written, key findings, pass/fail for tester).
 
 After the sub-agent returns:
-- Read the artifacts it produced (don't trust the summary alone — verify the files exist).
+- Verify the artifacts exist on disk — don't trust the summary alone.
 - For `tester`, scan `<dev-session-dir>/integrations-error-*.md` (without `-DONE`) to decide whether to loop back to `developer`.
-- For `improver` and `reviewer`, continue to the next phase in the pipeline.
+- For `improver` and `reviewer`, continue to the next phase.
 
 ## Complexity Assessment
 
-After `designer` finishes, **Read** `<dev-session-dir>/requirement.md` and `<dev-session-dir>/design.md`, then judge:
+After `designer` finishes, read `<dev-session-dir>/requirement.md` and `<dev-session-dir>/design.md`, then judge.
 
-**Include `improver` when ANY of these hold:**
-- New architectural pattern, framework, or cross-cutting concern is introduced (e.g., new auth flow, caching layer, messaging, background jobs)
-- Non-trivial algorithm, concurrency, performance, or security decision is involved
-- Data model or API contract is newly added or reshaped in a way that is hard to reverse
-- The design spans 3+ modules/components, or the implementation plan lists 5+ ordered tasks
-- The requirement has ambiguity or multiple viable solutions that benefit from a senior second-opinion
-- The affected surface is core/shared code used by many callers
+For each phase below: **include if ANY** of the include bullets hold; **skip only if ALL** of the skip bullets hold.
 
-**Skip `improver` when ALL of these hold:**
-- The change is localized (typically 1–2 files or one component)
-- No schema, API contract, or public interface change
-- The design reuses existing patterns and introduces no new abstractions
-- The implementation plan has a small, linear set of tasks (≤ 3)
-- Examples: copy tweaks, small UI adjustments, bugfixes with obvious root cause, renames, simple CRUD additions following existing conventions
+**`improver`**
+- Include: new architectural pattern, framework, or cross-cutting concern (auth, caching, messaging, background jobs); non-trivial algorithm, concurrency, performance, or security decision; newly added or hard-to-reverse data model / API contract; design spans 3+ modules or 5+ ordered tasks; ambiguous requirement with multiple viable solutions; affected surface is core/shared code with many callers.
+- Skip: localized change (1–2 files / one component); no schema, API contract, or public interface change; reuses existing patterns with no new abstractions; ≤3 linear tasks. Typical examples: copy tweaks, small UI adjustments, obvious bugfixes, renames, simple CRUD following existing conventions.
 
-**Include `reviewer` when ANY of these hold:**
-- The change touches core/shared code, security-sensitive paths, or logic with non-trivial branching
-- New or reshaped data models, API contracts, or public interfaces
-- Concurrency, transactions, error handling, or performance-sensitive code is involved
-- Multiple files are modified, or the diff is substantive (roughly 50+ changed lines of non-boilerplate code)
-- Developer output has uncertainty flags, TODOs, or deviations from the design
+**`reviewer`**
+- Include: touches core/shared or security-sensitive code, or logic with non-trivial branching; new or reshaped data models / API contracts / public interfaces; concurrency, transactions, error handling, or performance-sensitive code; multiple files modified or ~50+ non-boilerplate changed lines; developer output has uncertainty flags, TODOs, or deviations from the design.
+- Skip: trivial and mechanically obvious (copy tweak, style/format, typo, dependency bump without API change); no logic/data/API/interface change; tiny diff that follows an existing pattern verbatim; no security, concurrency, or error-handling implications.
 
-**Skip `reviewer` when ALL of these hold:**
-- Change is trivial and mechanically obvious (e.g., copy tweak, style/format, typo fix, dependency bump without API change)
-- No logic, data, API, or interface change
-- Diff is small (a few lines) and follows an existing pattern verbatim
-- No security, concurrency, or error-handling implications
+**`tester`**
+- Include: backend logic, data layer, API, business rules, or integrations touched; multiple components interact or a new flow is introduced; requirement has integration-testable acceptance criteria; design has an integration test plan; change risks regressions in flows touched by the diff.
+- Skip: purely cosmetic/static (copy, styles, typos, comments, formatting, docs-only); cannot be meaningfully covered by integration tests; no backend/data/API/business-rule change; no integration-testable acceptance criteria.
 
-**Include `tester` when ANY of these hold:**
-- Backend logic, data layer, API, business rules, or integrations are touched
-- Multiple components interact or a new flow is introduced
-- Requirement defines acceptance criteria that can be verified via integration tests
-- Design lists an integration test plan with runnable scenarios
-- The change risks regressions in existing flows touched by the diff
+**`documenter`**
+- Include: PRD directory exists and the change affects a documented model, dictionary, procedure/rule, or application/page; new or reshaped user-facing behavior, pipeline, or role responsibility; product positioning, architecture, or roles genuinely impacted; new domain concepts, terms, or business rules introduced.
+- Skip: no PRD directory exists; change is internal/technical only (refactor, build/CI tweak, dependency bump, code-only bug fix with no semantic change); no in-scope models, dictionaries, procedures, or applications affected; no impact on overview, architecture, or roles.
 
-**Skip `tester` when ALL of these hold:**
-- Change is purely cosmetic/static (copy, styles, typos, comments, formatting, docs-only)
-- Change cannot be meaningfully covered by integration tests (e.g., pure visual tweak)
-- No backend, data, API, or business rule is modified
-- Requirement has no integration-testable acceptance criteria
+**Tie-breaker:** when uncertain, include the phase. An unneeded review is cheap; a skipped needed one can mean a regression.
 
-**Include `documenter` when ANY of these hold:**
-- The PRD directory exists and the change affects a documented model, dictionary, procedure/rule, or application/page
-- New or reshaped user-facing behavior, pipeline, or role responsibility
-- Product positioning, architecture, or roles are genuinely impacted
-- New domain concepts, terms, or business rules are introduced
-
-**Skip `documenter` when ALL of these hold:**
-- No PRD directory exists (e.g., `<root-doc-dir>/prd/` is absent)
-- Change is internal/technical only — refactor, build/CI tweak, dependency bump, code-only bug fix with no semantic change
-- No models, dictionaries, procedures, or applications in scope are affected
-- No impact on overview, architecture, or roles
-
-**Tie-breaker rule:** When uncertain, include the phase. The cost of an unneeded review is low; the cost of skipping a needed one can be a regression.
-
-Record the decision to `<dev-session-dir>/auto-plan.md`. Keep the file short — phase-by-phase include/skip plus a one-line rationale each, and the effective pipeline on one line. No rigid template.
+Record the decision to `<dev-session-dir>/auto-plan.md` — phase-by-phase include/skip with one-line rationales, plus the effective pipeline on one line. No rigid template.
 
 ## pipeline
 
@@ -241,7 +190,6 @@ analyst -> designer -> [improver†] -> developer -> [reviewer†] -> [tester†
 ## Resume Support
 
 If `<dev-session-dir>/STATE` already exists when starting:
-- Read the state to determine which phase was active last.
-- If `<dev-session-dir>/auto-plan.md` exists, honor its phase decisions; otherwise re-run the Complexity Assessment before continuing past `designer`.
-- Skip already-completed phases and continue from the next phase in the effective pipeline.
-- State progression: `analyst` → `designer` → `[improver]` → `developer` → `[reviewer]` → `[tester]` → `[documenter]` → `done`.
+- Read it to determine which phase was active last.
+- If `<dev-session-dir>/auto-plan.md` exists, honor its decisions; otherwise re-run the Complexity Assessment before continuing past `designer`.
+- Skip completed phases and continue from the next phase in the effective pipeline (see the diagram above).
