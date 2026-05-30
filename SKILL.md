@@ -1,11 +1,11 @@
----s
+---
 name: develop-pipeline
-description: Hybrid development pipeline. The main agent runs analyst, designer, and developer inline, runs documenter inline when the complexity assessment requires, and dispatches improver, reviewer, and tester as sub-agents when needed. Each phase is principle-guided — the agent decides file content and structure based on context.
+description: Hybrid development pipeline. The main agent runs analyst, designer, and developer inline, and dispatches improver, reviewer, tester, and documenter as sub-agents when the complexity assessment requires. Each phase is principle-guided — the agent decides file content and structure based on context.
 argument-hint: [requirement description or session directory]
 allowed-tools: Read, Write, Edit, Glob, Grep, Bash, Agent
 ---
 
-Run the development pipeline with a **hybrid execution model**: the main agent runs most phases inline and delegates the quality-gate phases (`improver`, `reviewer`, `tester`) to sub-agents only when the Complexity Assessment says they're needed.
+Run the development pipeline with a **hybrid execution model**: the main agent runs most phases inline and delegates the quality-gate phases (`improver`, `reviewer`, `tester`) and `documenter` to sub-agents only when the Complexity Assessment says they're needed.
 
 ## Instructions
 
@@ -14,8 +14,9 @@ Run the development pipeline with a **hybrid execution model**: the main agent r
    - If the user specifies one, use it.
    - Else if the user supplies a requirement, create `<root-session-dir>/<YYYY>/<MM>/<DD>/YYYY-MM-DD-<NNN>-<requirement-short-name>/` (`<NNN>` = zero-padded daily sequence starting at 001) and write the raw requirement to `<session-dir>/requirement-raw.md`.
    - Else ask the user for one of the two.
-3. Run each phase by its principles in [Phases](#phases). Before starting a phase, write its name to `<session-dir>/STATE`. Inline phases (`analyst`, `designer`, `developer`, `documenter`) run in the main agent; sub-agent phases (`improver`, `reviewer`, `tester`) go through [Sub-Agent Dispatch](#sub-agent-dispatch).
+3. Run each phase by its principles in [Phases](#phases). Before starting a phase, write its name to `<session-dir>/STATE`. Inline phases (`analyst`, `designer`, `developer`) run in the main agent; sub-agent phases (`improver`, `reviewer`, `tester`, `documenter`) go through [Sub-Agent Dispatch](#sub-agent-dispatch).
 4. Run the pipeline conditionally per the [Complexity Assessment](#complexity-assessment); record the decision in `<session-dir>/auto-plan.md`. `analyst` and `designer` always run. If `tester` produces unfixed `<session-dir>/integrations-error-*.md` files (no `-DONE` suffix), loop back through `developer → [reviewer?] → tester`, capped at 3 iterations.
+   - **Parallelism:** `documenter` depends only on `design.md` plus the developer's implementation, not on review/test findings. When both `documenter` and the `reviewer`/`tester` chain are included, dispatch `documenter` **concurrently** with that chain (single message, multiple `Agent` calls) instead of serializing it at the tail. The `reviewer → tester` chain stays serial within itself (reviewer may edit code that tester then exercises).
 5. On completion, write `done` to `<session-dir>/STATE` and output a summary, noting which optional phases were skipped and why.
 
 ## Phases
@@ -88,7 +89,9 @@ Run the development pipeline with a **hybrid execution model**: the main agent r
 **Execution Steps (include in the sub-agent prompt):**
 - Read `<session-dir>/design.md`.
 - Identify every file the developer created or modified (`git diff` or recent file changes).
-- Review the diff for issues or improvements; write findings to `code-review.md`.
+- **First pass (initial review):** review the full diff against the design.
+- **Fix-loop iterations (a prior `tester` run failed and `developer` fixed it):** review **only the incremental fix diff** since the last review — not the whole change again. The earlier review still stands for untouched code.
+- Review for issues or improvements; write/append findings to `code-review.md`.
 - Apply accepted improvements directly to the code.
 - Run all unit tests and confirm they still pass.
 
@@ -106,8 +109,9 @@ Run the development pipeline with a **hybrid execution model**: the main agent r
 
 **Execution Steps (include in the sub-agent prompt):**
 - Read `<session-dir>/design.md`; review the implementation and existing unit tests.
-- Write or update **integration tests** based on the design's integration test plan. Cover every acceptance criterion and its implied edge cases. Add a short comment on each test describing the scenario it verifies.
-- Run all integration tests and analyze the results.
+- **First run:** write or update **integration tests** based on the design's integration test plan. Cover every acceptance criterion and its implied edge cases. Add a short comment on each test describing the scenario it verifies.
+- **Fix-loop reruns (a prior run failed and `developer` fixed it):** do **not** rebuild the suite. Reuse the existing tests; re-run the previously failing tests (plus any that share the touched code path) to confirm the fix, and add new cases only if the fix exposed an uncovered scenario.
+- Run the relevant integration tests and analyze the results.
 - Write `test-report-v<N>.md` summarizing the run.
 - On any failure: pick the next sequential `<N>` (check existing `integrations-error-*.md`), then write `<session-dir>/integrations-error-<N>.md` with (a) failing tests, (b) error messages / stack traces, (c) likely root cause, (d) suggested fix. Do **not** add the `-DONE` suffix — the developer adds it after fixing.
 
@@ -117,17 +121,19 @@ Run the development pipeline with a **hybrid execution model**: the main agent r
 - Each test case needs a comment describing the scenario it verifies.
 - Failures produce structured error reports so the developer loop can act on them; no silent passes.
 
-### 7. documenter (conditional, inline)
+### 7. documenter (conditional, sub-agent)
+
+**Execution:** dispatch via `Agent` (see [Sub-Agent Dispatch](#sub-agent-dispatch)). Independent of `reviewer`/`tester` — dispatch it concurrently with that chain (see Instruction 4).
 
 **Output file:** `<session-dir>/doc-changes.md`
 
-**Execution Steps:**
+**Execution Steps (include in the sub-agent prompt):**
 - Resolve `<root-doc-dir>`. If it doesn't exist, stop this phase gracefully — nothing to document against (the Complexity Assessment normally skips documenter in this case; this is a safety net).
 - Load relevant docs under `<root-doc-dir>`, and any model/process/module docs whose names match the requirement keywords. Skip files that don't exist.
-- Update the global files (overview/architecture/roles/glossary) if product positioning, architecture, or roles are genuinely affected.
+- Update the global files (overview/architecture/roles/term/glossary) if product positioning, architecture, or roles are genuinely affected.
 - Write a concise summary of what was added or changed across the documents to `doc-changes.md`.
 
-**Principles:**
+**Principles (include in the sub-agent prompt):**
 - Follow the existing document format. If none exists, pick a clean, consistent structure.
 - Touch global files only when the change genuinely affects them — no cosmetic edits.
 - Focus on documents relevant to the requirement scope; do not read or edit everything.
@@ -135,7 +141,7 @@ Run the development pipeline with a **hybrid execution model**: the main agent r
 
 ## Sub-Agent Dispatch
 
-When the Complexity Assessment includes `improver`, `reviewer`, or `tester`, run it as an isolated sub-agent to keep the quality-gate judgment independent of the main agent's context.
+When the Complexity Assessment includes `improver`, `reviewer`, `tester`, or `documenter`, run it as an isolated sub-agent to keep its judgment independent of the main agent's context and to free the main context from accumulating that work. When `documenter` and the `reviewer`/`tester` chain are both included, dispatch them concurrently (one message, multiple `Agent` calls).
 
 Call the `Agent` tool with:
 - `description`: `"<phase> phase"` (e.g. `"reviewer phase"`).
@@ -181,13 +187,14 @@ Record the decision to `<session-dir>/auto-plan.md` — phase-by-phase include/s
 ## pipeline
 
 ```
-analyst -> designer -> [improver†] -> developer -> [reviewer†] -> [tester†] -> [documenter]
-                                       ^                           |
-                                       |     (if tests fail)       |
-                                       +---------------------------+
+analyst -> designer -> [improver†] -> developer -+-> [reviewer†] -> [tester†]
+                                       ^           |                    |
+                                       |           +-> [documenter†]    | (documenter runs
+                                       |     (if tests fail)            |  in parallel with
+                                       +--------------------------------+  reviewer/tester)
 ```
 
-`†` = runs as a sub-agent via `Agent` dispatch. Phases without `†` run inline in the main agent. Phases in `[brackets]` run only if the Complexity Assessment marks them as needed. Max 3 fix iterations through `developer → [reviewer?] → tester`; after that, stop and report failure.
+`†` = runs as a sub-agent via `Agent` dispatch. Phases without `†` run inline in the main agent. Phases in `[brackets]` run only if the Complexity Assessment marks them as needed. `documenter` is dispatched concurrently with the `reviewer → tester` chain (it depends only on `design.md` + the implementation). The `reviewer → tester` chain is serial within itself. Max 3 fix iterations through `developer → [reviewer?] → tester`; after that, stop and report failure. In fix-loop iterations, `reviewer` reviews only the incremental fix diff and `tester` reruns only the failing/affected tests rather than rebuilding from scratch.
 
 ## Resume Support
 
